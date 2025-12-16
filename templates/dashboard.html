@@ -2,41 +2,46 @@
 <html>
 <head>
     <title>Dashboard</title>
-    
-    <!-- 1. jQuery & Select2 -->
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- 1. Preconnect to CDNs for speed -->
+    <link rel="preconnect" href="https://code.jquery.com">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://unpkg.com">
+
+    <!-- 2. Load CSS First (Critical for layout) -->
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-
-    <!-- 2. HTML5-QRCode Library for Scanning -->
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-
-    <!-- 3. Pass Data -->
-    <script>
-        window.availableLocations = {{ locations | tojson }};
-    </script>
-
-    <!-- 4. Custom Script -->
-    <script src="/static/js/scripts.js" defer></script>
 
     <style>
         body { font-family: sans-serif; max-width: 950px; margin: 0 auto; padding: 20px; background-color: #f4f6f8; color: #333; }
+        
+        /* --- LOADING SPINNER CSS --- */
+        #page-loader {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #f4f6f8; z-index: 99999;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            transition: opacity 0.3s;
+        }
+        .spinner {
+            width: 40px; height: 40px; border: 4px solid #ddd;
+            border-top: 4px solid #007bff; border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* ... Your Existing CSS ... */
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
         .card { background: white; border-radius: 8px; padding: 25px; margin-bottom: 25px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         h3 { margin-top: 0; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; margin-bottom: 20px; }
         label { font-weight: bold; font-size: 0.9em; display: block; margin-bottom: 5px; }
         
-        /* Select2 Style Overrides */
         .select2-container .select2-selection--single { height: 38px; border: 1px solid #ccc; display:flex; align-items:center; }
         .select2-container--default .select2-selection--single .select2-selection__arrow { height: 36px; }
         
         input[type="text"], input[type="file"] { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        
-        /* Buttons */
         .btn-primary { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
         .btn-search { background: #6c757d; color: white; padding: 8px 15px; border: none; border-radius: 0 4px 4px 0; cursor: pointer; height: 38px;}
         
-        /* NEW: Scan Button Style */
         .btn-scan { 
             background: #28a745; color: white; padding: 10px 20px; border: none; 
             border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 5px; font-weight: bold;
@@ -57,33 +62,49 @@
         .editable { cursor: pointer; border-bottom: 1px dashed #999; position: relative; transition: background 0.2s; min-width: 150px; }
         .editable:hover { background-color: #fff3cd; }
         .editable:hover::after { content: "▼"; position: absolute; right: 5px; font-size: 0.8em; color: #888; top: 12px;}
-        
         .uid-pill { background: #e9ecef; color: #495057; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.85em; }
 
-        /* --- SCANNER OVERLAY STYLES --- */
         #scanner-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9); z-index: 9999; display: none;
-            flex-direction: column; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.95); z-index: 9999; display: none;
+            flex-direction: column; align-items: center; justify-content: flex-start;
+            padding-top: 50px;
         }
-        #reader { width: 100%; max-width: 500px; background: #000; }
+        #reader { width: 100%; max-width: 500px; background: #000; min-height: 300px; border: 2px solid white; }
+        #debug-log {
+            color: #ff4444; background: #220000; width: 90%; max-width: 500px;
+            padding: 10px; margin-top: 10px; border: 1px solid red;
+            font-family: monospace; font-size: 0.8em; display: none; white-space: pre-wrap;
+        }
         .close-scanner {
-            margin-top: 20px; padding: 10px 30px; background: white; color: black; 
-            border: none; font-size: 1.2rem; cursor: pointer; border-radius: 50px;
+            margin-top: 20px; padding: 15px 40px; background: white; color: black; 
+            border: none; font-size: 1.2rem; cursor: pointer; border-radius: 50px; font-weight: bold;
+        }
+        
+        input::-webkit-calendar-picker-indicator {
+            display: block !important; opacity: 1 !important; background-color: transparent; cursor: pointer; margin-left: 5px;
         }
     </style>
 </head>
 <body>
+
+    <!-- LOADING SCREEN -->
+    <div id="page-loader">
+        <div class="spinner"></div>
+        <p style="margin-top:10px; color:#666;">Loading App...</p>
+    </div>
+
     <div class="header">
         <h1>Welcome, {{ username }}</h1>
         <a href="/logout" style="color:red; text-decoration:none;">Logout</a>
     </div>
 
-    <!-- SCANNER OVERLAY (Hidden by default) -->
+    <!-- SCANNER OVERLAY -->
     <div id="scanner-overlay">
-        <div style="color:white; margin-bottom: 10px; font-size: 1.2em;">Point camera at QR Code</div>
+        <div style="color:white; margin-bottom: 10px; font-size: 1.2em; font-weight:bold;">Scan QR Code</div>
         <div id="reader"></div>
-        <button class="close-scanner" onclick="stopScanner()">Cancel / Close</button>
+        <div id="debug-log"></div>
+        <button class="close-scanner" onclick="stopScanner()">Close Scanner</button>
     </div>
 
     <!-- CREATE ITEM FORM -->
@@ -117,11 +138,7 @@
             <h3 style="margin-bottom:0;">Inventory</h3>
             
             <div style="display:flex; gap: 15px; align-items: center;">
-                
-                <!-- NEW: SCAN QR BUTTON -->
-                <button onclick="startScanner()" class="btn-scan">
-                    <span>📷</span> Scan QR
-                </button>
+                <button onclick="startScanner()" class="btn-scan"><span>📷</span> Scan QR</button>
 
                 <form action="/dashboard" method="get" style="display:flex; flex-direction:column; align-items:flex-end; margin:0;">
                     <div style="display:flex; align-items: center; gap: 10px;">
@@ -129,13 +146,10 @@
                             <select name="loc" class="init-select2-filter" style="width: 100%;" onchange="this.form.submit()">
                                 <option value="">All Locations</option>
                                 {% for loc in locations %}
-                                    <option value="{{ loc }}" {% if selected_location == loc %}selected{% endif %}>
-                                        {{ loc }}
-                                    </option>
+                                    <option value="{{ loc }}" {% if selected_location == loc %}selected{% endif %}>{{ loc }}</option>
                                 {% endfor %}
                             </select>
                         </div>
-
                         <div class="search-container">
                             <input type="text" name="q" placeholder="Search..." value="{{ search_query or '' }}">
                             <button type="submit" class="btn-search">Search</button>
@@ -167,7 +181,7 @@
                     <td>
                         {% if item.photo %}
                             <a href="/items/{{ item.uid }}">
-                                <img src="/static/{{ item.photo }}" class="thumb-img">
+                                <img src="/items/{{ item.uid }}/thumbnail" class="thumb-img" loading="lazy">
                             </a>
                         {% else %}
                             <div class="no-thumb">No Img</div>
@@ -193,61 +207,111 @@
         </table>
     </div>
 
-    <!-- INITIALIZE SELECT2 AND SCANNER -->
+    <!-- ============================================= -->
+    <!-- LOAD SCRIPTS AT THE BOTTOM TO PREVENT BLOCKING -->
+    <!-- ============================================= -->
+
+    <!-- 1. External Libraries -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+    <!-- 2. Data Transfer -->
+    <script>
+        window.availableLocations = {{ locations | tojson }};
+    </script>
+
+    <!-- 3. Your Custom Logic -->
+    <script src="/static/js/scripts.js"></script>
+
+    <!-- 4. Initialize & Hide Loader -->
     <script>
         $(document).ready(function() {
+            // Hide Loader
+            $("#page-loader").fadeOut(300);
+
+            // Initialize Select2
             $('.init-select2').select2({ tags: true, placeholder: "Select or type new...", allowClear: true });
             $('.init-select2-filter').select2({ tags: false, placeholder: "Filter by Location", allowClear: true });
         });
 
         // --- SCANNER LOGIC ---
         let html5QrcodeScanner;
+        let isScannerRunning = false;
+
+        function logError(msg) {
+            const logEl = document.getElementById('debug-log');
+            if(logEl) {
+                logEl.style.display = "block";
+                logEl.innerText += "ERROR: " + msg + "\n";
+            }
+            console.error(msg);
+        }
 
         function startScanner() {
+            const debugLog = document.getElementById('debug-log');
             const overlay = document.getElementById('scanner-overlay');
+
+            if(!debugLog || !overlay) {
+                alert("HTML elements missing! Please clear browser cache.");
+                return;
+            }
+
+            // Reset UI
+            debugLog.innerText = "";
+            debugLog.style.display = "none";
             overlay.style.display = "flex";
 
-            html5QrcodeScanner = new Html5Qrcode("reader");
+            if (typeof Html5Qrcode === "undefined") {
+                logError("Scanner library not loaded. Check internet connection.");
+                return;
+            }
 
-            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            html5QrcodeScanner = new Html5Qrcode("reader", { verbose: false });
+
+            // Reduce scan area on mobile for performance
+            const config = { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 };
             
-            // Start scanning with rear camera ('environment')
-            html5QrcodeScanner.start({ facingMode: "environment" }, config, onScanSuccess);
+            html5QrcodeScanner.start(
+                { facingMode: "environment" }, 
+                config, 
+                onScanSuccess, 
+                onScanFailure 
+            ).then(() => {
+                isScannerRunning = true;
+            }).catch(err => {
+                isScannerRunning = false;
+                logError("Start Failed: " + err + "\n(Did you block permission? Using HTTPS?)");
+            });
         }
 
         function onScanSuccess(decodedText, decodedResult) {
-            // Stop scanning
-            html5QrcodeScanner.clear();
-            document.getElementById('scanner-overlay').style.display = "none";
-
-            // LOGIC: Handle the result
-            // Case 1: Result is a Full URL (e.g. http://192.168.1.5:8000/items/abc-123)
-            // Case 2: Result is just the UID (e.g. abc-123)
-            
+            stopScanner();
             let targetUid = decodedText;
-
-            // Simple check if it looks like a URL containing our path
             if (decodedText.includes("/items/")) {
-                // Extract the last part of the URL (the UID)
                 const parts = decodedText.split("/");
-                // remove potential empty string at end if url ends with /
                 targetUid = parts.pop() || parts.pop();
             }
-
-            // Redirect to item view
             window.location.href = "/items/" + targetUid;
         }
 
+        function onScanFailure(error) {
+            // ignore frame failures
+        }
+
         function stopScanner() {
-            if (html5QrcodeScanner) {
+            document.getElementById('scanner-overlay').style.display = "none";
+            if (html5QrcodeScanner && isScannerRunning) {
                 html5QrcodeScanner.stop().then(() => {
-                    document.getElementById('scanner-overlay').style.display = "none";
+                    html5QrcodeScanner.clear();
+                    isScannerRunning = false;
                 }).catch(err => {
-                    console.log("Stop failed: ", err);
-                    document.getElementById('scanner-overlay').style.display = "none";
+                    console.log("Stop warning:", err);
+                    isScannerRunning = false;
                 });
             } else {
-                document.getElementById('scanner-overlay').style.display = "none";
+                 if(html5QrcodeScanner) html5QrcodeScanner.clear();
+                 isScannerRunning = false;
             }
         }
     </script>
