@@ -3,7 +3,7 @@ import uuid
 import os
 from pathlib import Path
 from fastapi import UploadFile
-from sqlalchemy import or_
+from sqlalchemy import or_, and_, distinct 
 from passlib.context import CryptContext
 
 from models import User, Item
@@ -71,18 +71,6 @@ class ItemService:
         with self.db.session() as session:
             return session.query(Item).filter(Item.uid == uid).first()
 
-    def get_all_items(self, search_query: str = None):
-        with self.db.session() as session:
-            query = session.query(Item)
-            
-            if search_query:
-                # Filter: Name contains query OR Location contains query (case insensitive)
-                fmt = f"%{search_query}%"
-                query = query.filter(
-                    or_(Item.name.ilike(fmt), Item.location.ilike(fmt))
-                )
-            
-            return query.all()
 
     def update_location(self, uid: str, new_location: str):
         with self.db.session() as session:
@@ -101,3 +89,56 @@ class ItemService:
                 session.commit()
                 return True
             return False
+
+    def get_unique_locations(self):
+        """Fetches a list of all distinct locations currently in the DB."""
+        with self.db.session() as session:
+            # Get distinct locations, excluding None/Empty
+            locations = session.query(distinct(Item.location))\
+                               .filter(Item.location != None, Item.location != "")\
+                               .order_by(Item.location).all()
+            # Unpack list of tuples [('LocA',), ('LocB',)] -> ['LocA', 'LocB']
+            return [loc[0] for loc in locations]
+
+    def get_all_items(self, search_query: str = None, location_filter: str = None):
+        with self.db.session() as session:
+            query = session.query(Item)
+            
+            # 1. Apply Exact Location Filter (from the dropdown)
+            if location_filter:
+                query = query.filter(Item.location == location_filter)
+
+            # 2. Apply Advanced Text Search (&& and ||)
+            if search_query:
+                # Logic: Split by OR (||), then inside those, split by AND (&&)
+                # Example: "chair && wood || table"
+                # Means: (Item matches chair AND wood) OR (Item matches table)
+                
+                or_groups = search_query.split('||')
+                or_filters = []
+
+                for group in or_groups:
+                    and_parts = group.split('&&')
+                    and_filters = []
+                    
+                    for part in and_parts:
+                        term = part.strip()
+                        if term:
+                            fmt = f"%{term}%"
+                            # Match Name OR Location OR Note for this specific term
+                            part_filter = or_(
+                                Item.name.ilike(fmt), 
+                                Item.location.ilike(fmt),
+                                Item.note.ilike(fmt)
+                            )
+                            and_filters.append(part_filter)
+                    
+                    if and_filters:
+                        # Combine terms with AND
+                        or_filters.append(and_(*and_filters))
+                
+                if or_filters:
+                    # Combine groups with OR
+                    query = query.filter(or_(*or_filters))
+            
+            return query.all()

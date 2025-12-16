@@ -5,18 +5,12 @@ from fastapi.staticfiles import StaticFiles
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from typing import Optional
+from pydantic import BaseModel 
 
-# Import the container directly
+# Import container directly
 from di import container
 from services import AuthService, ItemService
 from database import Database
-from pydantic import BaseModel
-
-class LocationUpdate(BaseModel):
-    location: str
-
-class NoteUpdate(BaseModel):
-    note: str
 
 app = FastAPI()
 
@@ -26,35 +20,35 @@ templates = Jinja2Templates(directory="templates")
 SECRET_KEY = "lagom-secret-key"
 ALGORITHM = "HS256"
 
+# --- Models for JSON Updates ---
+class LocationUpdate(BaseModel):
+    location: str
+
+class NoteUpdate(BaseModel):
+    note: str
+
+# --- Startup ---
 @app.on_event("startup")
 def startup():
-    # Direct resolution
     db = container.resolve(Database)
     db.init_tables()
-    
-    # Create Admin
     auth = container.resolve(AuthService)
     auth.create_user("admin", "admin")
 
-# --- Auth Helpers ---
-
+# --- Helpers ---
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=30)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-# Helper for dependency injection
 def get_auth_service():
     return container.resolve(AuthService)
 
 def get_item_service():
     return container.resolve(ItemService)
 
-def get_current_user_cookie(
-    request: Request, 
-    service: AuthService = Depends(get_auth_service)
-):
+def get_current_user_cookie(request: Request, service: AuthService = Depends(get_auth_service)):
     token = request.cookies.get("access_token")
     if not token: return None
     try:
@@ -81,7 +75,6 @@ def login(
     response: Response,
     username: str = Form(...),
     password: str = Form(...),
-    # Direct injection via helper function
     auth_service: AuthService = Depends(get_auth_service)
 ):
     user = auth_service.authenticate(username, password)
@@ -104,20 +97,24 @@ def logout():
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(
     request: Request,
-    q: Optional[str] = None, 
+    q: Optional[str] = None,
+    loc: Optional[str] = None,
     user = Depends(get_current_user_cookie),
-    # Direct injection via helper function
     item_service: ItemService = Depends(get_item_service)
 ):
     if not user: return RedirectResponse("/login", status_code=302)
     
-    items = item_service.get_all_items(search_query=q)
+    items = item_service.get_all_items(search_query=q, location_filter=loc)
+    # IMPORTANT: Fetch locations for the dropdown
+    locations = item_service.get_unique_locations()
     
     return templates.TemplateResponse("dashboard.html", {
         "request": request, 
         "username": user.username, 
         "items": items,
-        "search_query": q
+        "search_query": q,
+        "selected_location": loc,
+        "locations": locations # <--- Passed to template here
     })
 
 @app.post("/items")
@@ -129,7 +126,6 @@ def create_item(
     item_service: ItemService = Depends(get_item_service)
 ):
     if not user: return RedirectResponse("/login", status_code=302)
-    
     item_service.create_item(name, location, photo)
     return RedirectResponse("/dashboard", status_code=302)
 
@@ -145,8 +141,17 @@ def get_item(
     item = item_service.get_item_by_uid(uid)
     if not item:
         return HTMLResponse("Item not found", status_code=404)
-        
-    return templates.TemplateResponse("item.html", {"request": request, "item": item})
+    
+    # IMPORTANT: Fetch locations for the dropdown in Item View too
+    locations = item_service.get_unique_locations()
+
+    return templates.TemplateResponse("item.html", {
+        "request": request, 
+        "item": item,
+        "locations": locations # <--- Passed to template here
+    })
+
+# --- JSON API Endpoints for JS ---
 
 @app.patch("/items/{uid}/location")
 def update_item_location(
@@ -155,13 +160,9 @@ def update_item_location(
     user = Depends(get_current_user_cookie),
     item_service: ItemService = Depends(get_item_service)
 ):
-    if not user:
-        return Response(status_code=401)
-    
+    if not user: return Response(status_code=401)
     success = item_service.update_location(uid, update_data.location)
-    if not success:
-        return Response(status_code=404)
-        
+    if not success: return Response(status_code=404)
     return {"msg": "Updated"}
 
 @app.patch("/items/{uid}/note")
@@ -172,8 +173,6 @@ def update_item_note(
     item_service: ItemService = Depends(get_item_service)
 ):
     if not user: return Response(status_code=401)
-    
     success = item_service.update_note(uid, update_data.note)
     if not success: return Response(status_code=404)
-        
     return {"msg": "Updated"}
