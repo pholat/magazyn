@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard</title>
+    <style>
+        body { font-family: sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background-color: #f4f6f8; color: #333; }
+        
+        /* Header */
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .header h1 { margin: 0; }
+        .logout-btn { color: #d9534f; text-decoration: none; border: 1px solid #d9534f; padding: 8px 16px; border-radius: 4px; transition: 0.2s; }
+        .logout-btn:hover { background: #d9534f; color: white; }
+
+        /* Content Boxes */
+        .card { background: white; border-radius: 8px; padding: 25px; margin-bottom: 25px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .card h3 { margin-top: 0; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; margin-bottom: 20px; }
+
+        /* Forms */
+        label { font-weight: bold; font-size: 0.9em; display: block; margin-bottom: 5px; }
+        input[type="text"], input[type="file"] { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        
+        /* Buttons */
+        .btn-primary { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; }
+        .btn-primary:hover { background: #0056b3; }
+        .btn-search { background: #6c757d; color: white; padding: 8px 15px; border: none; border-radius: 0 4px 4px 0; cursor: pointer; }
+
+        .search-wrapper { display: flex; margin-bottom: 0; }
+        .search-wrapper input { margin-bottom: 0; border-radius: 4px 0 0 4px; border-right: none; }
+        
+        /* Table */
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th { background: #f8f9fa; text-align: left; padding: 12px; border-bottom: 2px solid #dee2e6; color: #495057; }
+        td { padding: 12px; border-bottom: 1px solid #dee2e6; vertical-align: middle; }
+        tr:hover { background-color: #f8f9fa; }
+        .uid-pill { background: #e9ecef; color: #495057; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.85em; }
+        .link-view { color: #007bff; text-decoration: none; font-weight: bold; }
+
+        /* --- UPDATED THUMBNAIL STYLES (100px) --- */
+        .thumb-img {
+            width: 100px;  /* Doubled from 50px */
+            height: 100px; /* Doubled from 50px */
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            display: block;
+        }
+        .no-thumb {
+            width: 100px;  /* Doubled from 50px */
+            height: 100px; /* Doubled from 50px */
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8em;
+            color: #999;
+            border: 1px solid #eee;
+        }
+
+        /* --- EDITABLE LOCATION STYLES --- */
+        .editable { 
+            cursor: pointer; 
+            border-bottom: 1px dashed #999; 
+            transition: background 0.2s;
+            position: relative;
+        }
+        .editable:hover { background-color: #fff3cd; }
+        .editable:hover::after {
+            content: "✎";
+            position: absolute;
+            right: 5px;
+            font-size: 0.8em;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Welcome, {{ username }}</h1>
+        <a href="/logout" class="logout-btn">Logout</a>
+    </div>
+
+    <!-- ADD ITEM FORM -->
+    <div class="card">
+        <h3>Create New Item</h3>
+        <form action="/items" method="post" enctype="multipart/form-data">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <label>Item Name *</label>
+                    <input type="text" name="name" placeholder="e.g. Office Chair" required>
+                </div>
+                <div>
+                    <label>Location (Optional)</label>
+                    <input type="text" name="location" placeholder="e.g. Warehouse A, Row 3">
+                </div>
+            </div>
+
+            <label>Photo (Optional)</label>
+            <input type="file" name="photo">
+            
+            <button type="submit" class="btn-primary">Add Item</button>
+        </form>
+    </div>
+
+    <!-- INVENTORY LIST -->
+    <div class="card">
+        <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="margin:0; border:none; padding:0;">Inventory</h3>
+            <form action="/dashboard" method="get" class="search-wrapper" style="width: 300px;">
+                <input type="text" name="q" placeholder="Filter by name or location..." value="{{ search_query or '' }}">
+                <button type="submit" class="btn-search">Search</button>
+            </form>
+        </div>
+        
+        {% if search_query %}
+            <p style="color: #666; font-size: 0.9em;">
+                Showing results for: <strong>{{ search_query }}</strong> 
+                <a href="/dashboard" style="margin-left: 10px;">Clear Filter</a>
+            </p>
+        {% endif %}
+
+        <table>
+            <thead>
+                <tr>
+                    <!-- Increased width to fit 100px image -->
+                    <th style="width: 120px;">Image</th> 
+                    <th style="width: 30%;">Name</th>
+                    <th style="width: 30%;">Location (Click to edit)</th>
+                    <th>UID</th>
+                    <th style="text-align: right;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <!-- IMAGE COLUMN -->
+                    <td>
+                        {% if item.photo %}
+                            <a href="/items/{{ item.uid }}">
+                                <img src="/static/{{ item.photo }}" class="thumb-img" alt="thumb">
+                            </a>
+                        {% else %}
+                            <div class="no-thumb">No Img</div>
+                        {% endif %}
+                    </td>
+
+                    <td><strong>{{ item.name }}</strong></td>
+                    
+                    <td class="editable" onclick="editLocation(this, '{{ item.uid }}')">
+                        {{ item.location or 'Set Location' }}
+                    </td>
+                    
+                    <td><span class="uid-pill">{{ item.uid }}</span></td>
+                    <td style="text-align: right;">
+                        <a href="/items/{{ item.uid }}" class="link-view">Details &rarr;</a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 30px; color: #6c757d;">
+                        No items found.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        function editLocation(td, uid) {
+            if (td.querySelector("input")) return;
+
+            const currentText = td.innerText === "Set Location" ? "" : td.innerText;
+            const input = document.createElement("input");
+            input.type = "text";
+            input.value = currentText;
+            input.style.width = "100%";
+            input.style.padding = "5px";
+            input.style.marginBottom = "0";
+
+            td.innerText = "";
+            td.appendChild(input);
+            input.focus();
+
+            function save() {
+                const newValue = input.value.trim();
+                td.innerText = newValue || "Set Location";
+                fetch(`/items/${uid}/location`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ location: newValue })
+                });
+            }
+
+            input.addEventListener("blur", save);
+            input.addEventListener("keydown", function(e) {
+                if (e.key === "Enter") input.blur();
+            });
+        }
+    </script>
+</body>
+</html>
