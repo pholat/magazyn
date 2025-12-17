@@ -1,18 +1,27 @@
+import os
 import shutil
 import uuid
-import os
 from pathlib import Path
 from fastapi import UploadFile
-from sqlalchemy import or_, and_, distinct 
+from sqlalchemy import or_, and_, distinct
 from passlib.context import CryptContext
+from PIL import Image, ImageOps
 
 from models import User, Item
 from database import Database
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# Ensure static directory exists
-Path("static").mkdir(parents=True, exist_ok=True)
+# 1. Define Absolute Paths (Fixes "Where did my file go?" issues)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_DIR = os.path.join(BASE_DIR, "static", "uploads")
+THUMB_DIR = os.path.join(BASE_DIR, "static", "thumbs")
+
+# Ensure directories exist
+Path(UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
+Path(THUMB_DIR).mkdir(parents=True, exist_ok=True)
+
+print(f"📂 Storage initialized at: {UPLOAD_DIR}")
 
 class AuthService:
     def __init__(self, db: Database):
@@ -47,19 +56,69 @@ class ItemService:
     def __init__(self, db: Database):
         self.db = db
 
+    def _process_image(self, photo: UploadFile):
+        """Optimizes image to stay under ~2MB and creates a thumbnail."""
+        try:
+            print(f"📸 Processing image: {photo.filename}")
+            
+            # 1. Reset file pointer (Crucial fix!)
+            photo.file.seek(0)
+            
+            ext = photo.filename.split(".")[-1].lower()
+            if ext not in ["jpg", "jpeg", "png", "webp"]:
+                ext = "jpg"
+            
+            base_name = f"{uuid.uuid4()}.{ext}"
+            full_path = os.path.join(UPLOAD_DIR, base_name)
+            thumb_path = os.path.join(THUMB_DIR, base_name)
+
+            # 2. Open image with Pillow
+            img = Image.open(photo.file)
+            
+            # 3. Fix orientation (Mobile photos often need this)
+            img = ImageOps.exif_transpose(img)
+
+            # 4. Convert to RGB if necessary (e.g. PNGs with transparency)
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+
+            # 5. Downscale full image (Max 1920px)
+            max_size = (1920, 1920)
+            img.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+            # 6. Save Optimized Full Image
+            img.save(full_path, optimize=True, quality=85)
+            print(f"   ✅ Saved full image: {full_path}")
+
+            # 7. Create Miniature (200x200 crop)
+            thumb = ImageOps.fit(img, (200, 200), Image.Resampling.LANCZOS)
+            thumb.save(thumb_path, optimize=True, quality=75)
+            print(f"   ✅ Saved thumbnail: {thumb_path}")
+
+            return base_name
+
+        except Exception as e:
+            print(f"❌ Image processing failed: {e}")
+            return None
+
+    def _delete_old_photos(self, filename: str):
+        if not filename: return
+        try:
+            p1 = os.path.join(UPLOAD_DIR, filename)
+            p2 = os.path.join(THUMB_DIR, filename)
+            if os.path.exists(p1): os.remove(p1)
+            if os.path.exists(p2): os.remove(p2)
+            print(f"🗑️ Deleted old photo: {filename}")
+        except Exception as e:
+            print(f"⚠️ Failed to delete old photo: {e}")
+
     def create_item(self, name: str, location: str, photo: UploadFile):
         photo_filename = None
         
-        # Save file to disk if provided
+        # Only process if a file was actually uploaded (has a filename)
         if photo and photo.filename:
-            # Generate unique filename
-            photo_filename = f"{uuid.uuid4()}_{photo.filename}"
-            file_location = f"static/{photo_filename}"
-            
-            with open(file_location, "wb+") as file_object:
-                shutil.copyfileobj(photo.file, file_object)
+            photo_filename = self._process_image(photo)
 
-        # Save to DB
         with self.db.session() as session:
             new_item = Item(name=name, location=location, photo=photo_filename)
             session.add(new_item)
@@ -67,10 +126,32 @@ class ItemService:
             session.refresh(new_item)
             return new_item
 
-    def get_item_by_uid(self, uid: str):
+    def update_photo(self, uid: str, photo: UploadFile):
+        # Process new image first
+        new_filename = self._process_image(photo)
+        if not new_filename:
+            return False
+        
         with self.db.session() as session:
-            return session.query(Item).filter(Item.uid == uid).first()
+            item = session.query(Item).filter(Item.uid == uid).first()
+            if item:
+                # Delete old files from disk
+                self._delete_old_photos(item.photo)
+                # Update DB
+                item.photo = new_filename
+                session.commit()
+                return True
+            return False
 
+    def delete_item(self, uid: str):
+        with self.db.session() as session:
+            item = session.query(Item).filter(Item.uid == uid).first()
+            if item:
+                self._delete_old_photos(item.photo)
+                session.delete(item)
+                session.commit()
+                return True
+            return False
 
     def update_location(self, uid: str, new_location: str):
         with self.db.session() as session:
@@ -90,73 +171,9 @@ class ItemService:
                 return True
             return False
 
-    def get_unique_locations(self):
-        """Fetches a list of all distinct locations currently in the DB."""
-        with self.db.session() as session:
-            # Get distinct locations, excluding None/Empty
-            locations = session.query(distinct(Item.location))\
-                               .filter(Item.location != None, Item.location != "")\
-                               .order_by(Item.location).all()
-            # Unpack list of tuples [('LocA',), ('LocB',)] -> ['LocA', 'LocB']
-            return [loc[0] for loc in locations]
-
-    def get_all_items(self, search_query: str = None, location_filter: str = None):
-        with self.db.session() as session:
-            query = session.query(Item)
-            
-            # 1. Apply Exact Location Filter (from the dropdown)
-            if location_filter:
-                query = query.filter(Item.location == location_filter)
-
-            # 2. Apply Advanced Text Search (&& and ||)
-            if search_query:
-                # Logic: Split by OR (||), then inside those, split by AND (&&)
-                # Example: "chair && wood || table"
-                # Means: (Item matches chair AND wood) OR (Item matches table)
-                
-                or_groups = search_query.split('||')
-                or_filters = []
-
-                for group in or_groups:
-                    and_parts = group.split('&&')
-                    and_filters = []
-                    
-                    for part in and_parts:
-                        term = part.strip()
-                        if term:
-                            fmt = f"%{term}%"
-                            # Match Name OR Location OR Note for this specific term
-                            part_filter = or_(
-                                Item.name.ilike(fmt), 
-                                Item.location.ilike(fmt),
-                                Item.note.ilike(fmt)
-                            )
-                            and_filters.append(part_filter)
-                    
-                    if and_filters:
-                        # Combine terms with AND
-                        or_filters.append(and_(*and_filters))
-                
-                if or_filters:
-                    # Combine groups with OR
-                    query = query.filter(or_(*or_filters))
-            
-            return query.all()
-
-    def delete_item(self, uid: str):
-        with self.db.session() as session:
-            item = session.query(Item).filter(Item.uid == uid).first()
-            if item:
-                session.delete(item)
-                session.commit()
-                return True
-            return False
-
     def update_date(self, uid: str, new_date: str):
-        # new_date will come in as an ISO string (e.g. 2023-12-01T10:00)
         from datetime import datetime
         try:
-            # Parse HTML5 datetime-local format
             dt_object = datetime.fromisoformat(new_date)
         except ValueError:
             return False
@@ -168,3 +185,44 @@ class ItemService:
                 session.commit()
                 return True
             return False
+
+    def get_item_by_uid(self, uid: str):
+        with self.db.session() as session:
+            return session.query(Item).filter(Item.uid == uid).first()
+
+    def get_all_items(self, search_query: str = None, location_filter: str = None):
+        with self.db.session() as session:
+            query = session.query(Item)
+            
+            if location_filter:
+                query = query.filter(Item.location == location_filter)
+
+            if search_query:
+                # Supports "term1 && term2 || term3" logic
+                or_groups = search_query.split('||')
+                or_filters = []
+                for group in or_groups:
+                    and_parts = group.split('&&')
+                    and_filters = []
+                    for part in and_parts:
+                        term = part.strip()
+                        if term:
+                            fmt = f"%{term}%"
+                            and_filters.append(or_(
+                                Item.name.ilike(fmt), 
+                                Item.location.ilike(fmt),
+                                Item.note.ilike(fmt)
+                            ))
+                    if and_filters:
+                        or_filters.append(and_(*and_filters))
+                if or_filters:
+                    query = query.filter(or_(*or_filters))
+            
+            return query.all()
+
+    def get_unique_locations(self):
+        with self.db.session() as session:
+            locations = session.query(distinct(Item.location))\
+                               .filter(Item.location != None, Item.location != "")\
+                               .order_by(Item.location).all()
+            return [loc[0] for loc in locations]

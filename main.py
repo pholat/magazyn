@@ -6,6 +6,7 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from typing import Optional
 from pydantic import BaseModel 
+import os
 
 # Import container directly
 from di import container
@@ -206,3 +207,38 @@ def update_item_date(
     success = item_service.update_date(uid, update_data.date)
     if not success: return Response(status_code=400)
     return {"msg": "Updated"}
+
+@app.post("/items/{uid}/photo")
+def update_item_photo(
+    uid: str,
+    photo: UploadFile = File(...),
+    user = Depends(get_current_user_cookie),
+    item_service: ItemService = Depends(get_item_service)
+):
+    if not user: return Response(status_code=401)
+
+    success = item_service.update_photo(uid, photo)
+    if not success: return Response(status_code=400)
+
+    # Return a success message or redirect
+    return {"msg": "Photo updated"}
+
+@app.get("/items/{uid}/thumbnail")
+def get_item_thumbnail(uid: str, item_service: ItemService = Depends(get_item_service)):
+    item = item_service.get_item_by_uid(uid)
+    if not item or not item.photo:
+        return Response(status_code=404)
+
+    thumb_path = f"static/thumbs/{item.photo}"
+
+    if os.path.exists(thumb_path):
+        from fastapi.responses import FileResponse
+        return FileResponse(thumb_path)
+
+    # Fallback: If thumb missing but full photo exists (old data), generate on fly
+    full_path = f"static/uploads/{item.photo}" # Note: 'uploads' subfolder
+    if os.path.exists(full_path):
+        # ... logic to generate on fly ...
+        pass
+
+    return Response(status_code=404)
