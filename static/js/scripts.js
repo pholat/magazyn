@@ -1,34 +1,118 @@
 /**
  * scripts.js
- * Handles inline editing with Select2 and Textareas
+ * Handles inline editing, Deletion, and Copy UID
  */
 
+/* =========================================
+   HELPER: COPY UID TO CLIPBOARD
+   ========================================= */
+function copyToClipboard(text, element) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            showCopyFeedback(element);
+        }).catch(err => {
+            console.error('Failed to copy: ', err);
+            fallbackCopy(text, element);
+        });
+    } else {
+        fallbackCopy(text, element);
+    }
+}
+
+function fallbackCopy(text, element) {
+    // Fallback for older browsers / insecure contexts
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    document.body.appendChild(textArea);
+    textArea.select();
+    try {
+        document.execCommand('copy');
+        showCopyFeedback(element);
+    } catch (err) {
+        console.error('Fallback copy failed', err);
+        alert("UID: " + text); // Last resort: show alert so user can copy manually
+    }
+    document.body.removeChild(textArea);
+}
+
+function showCopyFeedback(element) {
+    const originalText = element.innerText;
+    element.innerText = "Copied!";
+    element.style.background = "#28a745"; // Green
+    element.style.color = "white";
+    
+    setTimeout(() => {
+        element.innerText = originalText;
+        element.style.background = ""; // Reset
+        element.style.color = "";
+    }, 1500);
+}
+
+/* =========================================
+   HELPER: SELECT2 DATA
+   ========================================= */
 function getSelect2Data() {
     if (!window.availableLocations) return [];
-    // Convert array of strings to Select2 format {id, text}
     return window.availableLocations.map(loc => ({ id: loc, text: loc }));
 }
 
 /* =========================================
-   DASHBOARD LOGIC
+   DELETE ITEM
    ========================================= */
+function deleteItem(uid, btnElement) {
+    if (!confirm("Are you sure you want to delete this item?")) return;
 
+    fetch(`/items/${uid}`, { method: 'DELETE' })
+    .then(response => {
+        if (response.ok) {
+            // Support both Table row and Mobile Card view
+            const row = btnElement.closest('tr') || btnElement.closest('.card-mobile') || btnElement.parentElement.parentElement;
+            if (row) {
+                row.style.opacity = '0';
+                setTimeout(() => row.remove(), 500);
+            } else {
+                location.reload();
+            }
+        } else {
+            alert("Failed to delete.");
+        }
+    });
+}
+
+/* =========================================
+   DASHBOARD LOCATION EDIT
+   ========================================= */
 function editDashboardLocation(td, uid) {
-    if ($(td).find('select').length > 0) return;
-
+    // 1. Safety Checks
+    if ($(td).find('select').length > 0 || $(td).find('input').length > 0) return;
+    
     const currentText = td.innerText === "Set Location" ? "" : td.innerText.trim();
-    
-    // Create Select Element
-    const $select = $('<select>').css('width', '100%');
-    
-    // If current value exists, add it as an option so it shows up selected
-    if (currentText) {
-        $select.append(new Option(currentText, currentText, true, true));
+
+    // 2. Check if jQuery/Select2 is loaded. If not, fallback to text input.
+    if (typeof $ === 'undefined' || !$.fn.select2) {
+        console.warn("Select2 not loaded, falling back to simple input");
+        const input = document.createElement("input");
+        input.value = currentText;
+        input.className = "edit-input";
+        input.onblur = function() { saveSimple(this.value); };
+        input.onkeydown = function(e) { if(e.key==="Enter") this.blur(); };
+        td.innerHTML = "";
+        td.appendChild(input);
+        input.focus();
+        
+        function saveSimple(val) {
+            td.innerText = val || "Set Location";
+            updateLocationApi(uid, val);
+        }
+        return;
     }
 
+    // 3. Create Select2 Logic
+    const $select = $('<select>').css('width', '100%');
+    if (currentText) $select.append(new Option(currentText, currentText, true, true));
+    
     $(td).empty().append($select);
 
-    // Init Select2
     $select.select2({
         tags: true,
         data: getSelect2Data(),
@@ -37,51 +121,38 @@ function editDashboardLocation(td, uid) {
 
     $select.select2('open');
 
+    // 4. Save Logic
     function save() {
-        // Timeout ensures Select2 has fully processed the value change
+        // Delay to allow value capture
         setTimeout(() => {
             const newValue = $select.val();
-            $select.select2('destroy');
+            
+            if ($select.data('select2')) {
+                $select.select2('destroy');
+            }
             td.innerText = newValue || "Set Location";
 
-            if (newValue === currentText && newValue !== "") return;
-
-            // API Call
-            fetch(`/items/${uid}/location`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ location: newValue })
-            }).then(response => {
-                if (!response.ok) {
-                    td.innerText = currentText;
-                    alert("Failed to save.");
-                } else {
-                    // Update global list if new tag
-                    if (newValue && !window.availableLocations.includes(newValue)) {
-                        window.availableLocations.push(newValue);
-                    }
-                }
-            });
+            if (newValue !== currentText) {
+                updateLocationApi(uid, newValue);
+            }
         }, 50);
     }
 
     $select.on('select2:close', save);
 }
 
-
 /* =========================================
-   ITEM DETAIL VIEW LOGIC
+   ITEM VIEW EDIT (Unified)
    ========================================= */
-
 function editItemField(elementId, fieldType, uid) {
     const displayEl = document.getElementById(elementId);
-    if ($(displayEl).find('input, textarea, select').length > 0) return;
+    if (!displayEl) return;
+    if (displayEl.querySelector('input, textarea, select')) return;
 
-    const currentText = (displayEl.innerText === "Click to add note..." || displayEl.innerText === "Set Location") 
-                        ? "" 
-                        : displayEl.innerText.trim();
+    let currentText = displayEl.innerText.trim();
+    if (["Click to add note...", "Set Location", "None"].includes(currentText)) currentText = "";
 
-    // --- HANDLE NOTES ---
+    // --- NOTES ---
     if (fieldType === 'note') {
         const textarea = document.createElement("textarea");
         textarea.className = "edit-input";
@@ -90,60 +161,91 @@ function editItemField(elementId, fieldType, uid) {
         displayEl.innerHTML = "";
         displayEl.appendChild(textarea);
         textarea.focus();
-
-        const saveNote = () => {
-            const newValue = textarea.value.trim();
-            displayEl.innerText = newValue || "Click to add note...";
-            fetch(`/items/${uid}/note`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ note: newValue })
-            });
+        
+        textarea.onblur = () => {
+            const val = textarea.value.trim();
+            displayEl.innerText = val || "Click to add note...";
+            updateNoteApi(uid, val);
         };
-        textarea.addEventListener("blur", saveNote);
-        textarea.addEventListener("keydown", (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") saveNote();
-        });
         return;
     }
 
-    // --- HANDLE LOCATION (Select2) ---
-    const $displayEl = $(displayEl);
-    const $select = $('<select>');
-    
-    if (currentText) {
-        $select.append(new Option(currentText, currentText, true, true));
+    // --- DATE ---
+    if (fieldType === 'date') {
+        const input = document.createElement("input");
+        input.type = "datetime-local";
+        input.className = "edit-input";
+        if (currentText.length >= 16) input.value = currentText.substring(0, 16).replace(" ", "T");
+        
+        displayEl.innerHTML = "";
+        displayEl.appendChild(input);
+        input.focus();
+        
+        const saveDate = () => {
+            const val = input.value;
+            if(!val) { displayEl.innerText = currentText; return; }
+            displayEl.innerText = val.replace("T", " ") + ":00";
+            updateDateApi(uid, val);
+        };
+        input.onblur = saveDate;
+        input.onkeydown = (e) => { if(e.key==="Enter") saveDate(); };
+        return;
     }
 
+    // --- LOCATION (Select2) ---
+    // Reuse the dashboard logic but applied to a specific ID
+    // Check for Select2 support first
+    if (typeof $ === 'undefined' || !$.fn.select2) {
+        alert("Select2 library missing. Please refresh.");
+        return;
+    }
+
+    const $displayEl = $(displayEl);
+    const $select = $('<select>');
+    if (currentText) $select.append(new Option(currentText, currentText, true, true));
+
     $displayEl.empty().append($select);
-
-    $select.select2({
-        tags: true,
-        data: getSelect2Data(),
-        width: '100%'
-    });
-
+    $select.select2({ tags: true, data: getSelect2Data(), width: '100%' });
     $select.select2('open');
 
-    const saveLocation = () => {
+    const saveLoc = () => {
         setTimeout(() => {
-            const newValue = $select.val();
-            $select.select2('destroy');
-            displayEl.innerText = newValue || "Set Location";
-
-            if (newValue === currentText && newValue !== "") return;
-
-            fetch(`/items/${uid}/location`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ location: newValue })
-            }).then(res => {
-                if(res.ok && newValue && !window.availableLocations.includes(newValue)) {
-                    window.availableLocations.push(newValue);
-                }
-            });
+            const val = $select.val();
+            if ($select.data('select2')) $select.select2('destroy');
+            displayEl.innerText = val || "Set Location";
+            if (val !== currentText) updateLocationApi(uid, val);
         }, 50);
     };
+    $select.on('select2:close', saveLoc);
+}
 
-    $select.on('select2:close', saveLocation);
+/* =========================================
+   API HELPERS
+   ========================================= */
+function updateLocationApi(uid, val) {
+    fetch(`/items/${uid}/location`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location: val })
+    }).then(res => {
+        if(res.ok && val && window.availableLocations && !window.availableLocations.includes(val)) {
+            window.availableLocations.push(val);
+        }
+    });
+}
+
+function updateNoteApi(uid, val) {
+    fetch(`/items/${uid}/note`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: val })
+    });
+}
+
+function updateDateApi(uid, val) {
+    fetch(`/items/${uid}/date`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: val })
+    });
 }

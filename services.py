@@ -142,3 +142,29 @@ class ItemService:
                     query = query.filter(or_(*or_filters))
             
             return query.all()
+
+    def delete_item(self, uid: str):
+        with self.db.session() as session:
+            item = session.query(Item).filter(Item.uid == uid).first()
+            if item:
+                session.delete(item)
+                session.commit()
+                return True
+            return False
+
+    def update_date(self, uid: str, new_date: str):
+        # new_date will come in as an ISO string (e.g. 2023-12-01T10:00)
+        from datetime import datetime
+        try:
+            # Parse HTML5 datetime-local format
+            dt_object = datetime.fromisoformat(new_date)
+        except ValueError:
+            return False
+
+        with self.db.session() as session:
+            item = session.query(Item).filter(Item.uid == uid).first()
+            if item:
+                item.date = dt_object
+                session.commit()
+                return True
+            return False

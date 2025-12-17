@@ -27,6 +27,10 @@ class LocationUpdate(BaseModel):
 class NoteUpdate(BaseModel):
     note: str
 
+class DateUpdate(BaseModel):
+    date: str
+
+
 # --- Startup ---
 @app.on_event("startup")
 def startup():
@@ -175,4 +179,30 @@ def update_item_note(
     if not user: return Response(status_code=401)
     success = item_service.update_note(uid, update_data.note)
     if not success: return Response(status_code=404)
+    return {"msg": "Updated"}
+
+@app.delete("/items/{uid}")
+def delete_item(
+    uid: str,
+    user = Depends(get_current_user_cookie),
+    item_service: ItemService = Depends(get_item_service)
+):
+    if not user: return Response(status_code=401)
+    
+    success = item_service.delete_item(uid)
+    if not success: return Response(status_code=404)
+    return {"msg": "Deleted"}
+
+# --- NEW: DATE UPDATE ROUTE ---
+@app.patch("/items/{uid}/date")
+def update_item_date(
+    uid: str, 
+    update_data: DateUpdate,
+    user = Depends(get_current_user_cookie),
+    item_service: ItemService = Depends(get_item_service)
+):
+    if not user: return Response(status_code=401)
+    
+    success = item_service.update_date(uid, update_data.date)
+    if not success: return Response(status_code=400)
     return {"msg": "Updated"}
