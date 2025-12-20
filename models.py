@@ -24,3 +24,4 @@ class Item(Base):
     location = Column(String, nullable=True)
     photo = Column(String, nullable=True)
     note = Column(String, nullable=True)
+    tags = Column(String, nullable=True)

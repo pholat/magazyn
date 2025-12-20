@@ -5,19 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <link rel="preconnect" href="https://code.jquery.com">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://unpkg.com">
+
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 
     <style>
         body { font-family: sans-serif; max-width: 1000px; margin: 0 auto; padding: 15px; background-color: #f4f6f8; color: #333; }
         
-        /* ... Loader CSS (Keep existing) ... */
+        /* Loader */
         @keyframes safeFadeOut { 0% { opacity: 1; } 99% { opacity: 0; pointer-events: none;} 100% { opacity: 0; pointer-events: none; visibility: hidden; } }
         #page-loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #ffffff; z-index: 99999; display: flex; flex-direction: column; align-items: center; justify-content: center; animation: safeFadeOut 4s forwards; }
         .loader-hidden { opacity: 0 !important; pointer-events: none !important; visibility: hidden !important; }
         .spinner { width: 50px; height: 50px; border: 5px solid #ddd; border-top: 5px solid #007bff; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* General UI */
+        /* UI */
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         h3 { margin-top: 0; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; margin-bottom: 20px; }
@@ -25,62 +28,64 @@
 
         input[type="text"], input[type="file"], .select2-container .select2-selection--single { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; height: 40px; }
         .select2-container--default .select2-selection--single .select2-selection__arrow { height: 38px; }
+        .select2-container .select2-selection--multiple { min-height: 40px; border: 1px solid #ccc; border-radius: 4px; }
 
         .btn-primary, .btn-scan, .btn-search { border: none; border-radius: 4px; cursor: pointer; color: white; padding: 0 15px; font-size: 14px; height: 40px; display: inline-flex; align-items: center; justify-content: center; }
-        .btn-primary { background: #007bff; width: 100%; }
+        .btn-primary { background: #007bff; width: 100%; margin-top:10px; }
         .btn-scan { background: #28a745; gap: 5px; white-space: nowrap; }
         .btn-search { background: #6c757d; border-radius: 0 4px 4px 0; }
         
         .btn-delete { background: none; border: none; cursor: pointer; font-size: 1.2rem; transition: transform 0.2s; margin-right: 10px; }
         .btn-delete:hover { transform: scale(1.2); color: red; }
 
-        /* --- HORIZONTAL FILTER BAR CSS --- */
+        /* Filter Bar */
         .filter-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
-        
         .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; width: 100%; md:width: auto; }
-        
         .filter-form { display: flex; align-items: center; gap: 10px; flex-grow: 1; }
-        
-        /* Wrapper for Location Select2 to force width */
         .select-wrapper { width: 200px; flex-shrink: 2; }
-        
-        /* Search group keeps input and button attached */
         .search-group { display: flex; flex-grow: 1; min-width: 150px; }
         .search-group input { border-radius: 4px 0 0 4px; margin-bottom: 0; width: 100%; }
 
-        /* Table & Thumbnails */
+        /* Table */
         table { width: 100%; border-collapse: collapse; margin-top: 0; }
         th { background: #f8f9fa; text-align: left; padding: 12px; border-bottom: 2px solid #dee2e6; color: #495057; }
         td { padding: 12px; border-bottom: 1px solid #dee2e6; vertical-align: middle; }
         .thumb-img { width: 80px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd; display: block;}
         .no-thumb { width: 80px; height: 80px; background: #f0f0f0; display:flex; align-items:center; justify-content:center; color:#999; font-size:0.8em; border: 1px solid #eee; border-radius: 4px;}
+        .editable { cursor: pointer; border-bottom: 1px dashed #999; min-width: 120px; }
+        .editable:hover { background: #fff3cd; }
+        
+        /* Pills */
         .uid-pill { background: #e9ecef; color: #495057; padding: 4px 8px; border-radius: 4px; font-family: monospace; font-size: 0.85em; cursor: pointer; }
-        .editable { cursor: pointer; border-bottom: 1px dashed #999; }
+        .tag-pill { display: inline-block; background: #e1f5fe; color: #0277bd; font-size: 0.75em; padding: 2px 6px; border-radius: 10px; margin-right: 4px; margin-top: 4px; border: 1px solid #b3e5fc; }
 
         /* Mobile Response */
         @media screen and (max-width: 768px) {
             .filter-header { flex-direction: column; align-items: stretch; }
             .toolbar { flex-direction: row; flex-wrap: wrap; }
-            .select-wrapper { width: 100%; } /* Dropdown full width on mobile */
+            .select-wrapper { width: 100%; }
             .filter-form { flex-wrap: wrap; }
             .search-group { width: 100%; margin-top: 5px; }
             
-            /* Card View for Table */
             table, thead, tbody, th, td, tr { display: block; }
             thead tr { position: absolute; top: -9999px; left: -9999px; }
             tr { margin-bottom: 15px; border: 1px solid #ddd; border-radius: 8px; padding: 10px; background: #fff; }
             td { border: none; position: relative; padding-left: 50%; text-align: right; min-height: 25px; display: flex; align-items: center; justify-content: flex-end; }
             td:before { position: absolute; left: 10px; width: 45%; text-align: left; font-weight: bold; color: #666; content: attr(data-label); }
+            
             td[data-label="Image"] { justify-content: center; padding-left: 0; }
             td[data-label="Image"]:before { display: none; }
+            td[data-label="Tags"] { display: block; text-align: left; padding-left: 10px; margin-top:5px; }
+            td[data-label="Tags"]:before { position: relative; left: 0; width: auto; display:block; margin-bottom:5px; }
+            
             td[data-label="Action"] { justify-content: space-between; padding-left: 0; margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px; }
             td[data-label="Action"]:before { display: none; }
             .thumb-img, .no-thumb { width: 100%; height: 200px; }
         }
 
-        /* Overlay */
         #scanner-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 9999; display: none; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 50px; }
         #reader { width: 100%; max-width: 500px; background: #000; min-height: 300px; border: 2px solid white; }
+        #debug-log { color: #ff4444; background: #220000; width: 90%; max-width: 500px; padding: 10px; margin-top: 10px; border: 1px solid red; font-family: monospace; font-size: 0.8em; display: none; white-space: pre-wrap; }
         .close-scanner { margin-top: 20px; padding: 15px 40px; background: white; color: black; border: none; font-size: 1.2rem; cursor: pointer; border-radius: 50px; font-weight: bold; }
     </style>
 </head>
@@ -96,6 +101,7 @@
     <div id="scanner-overlay">
         <div style="color:white; margin-bottom: 10px; font-size: 1.2em;">Scan QR Code</div>
         <div id="reader"></div>
+        <div id="debug-log"></div>
         <button class="close-scanner" onclick="stopScanner()">Close</button>
     </div>
 
@@ -105,8 +111,8 @@
         <form action="/items" method="post" enctype="multipart/form-data">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
                 <div>
-                    <label>Name</label>
-                    <input type="text" name="name" placeholder="Item Name" required>
+                    <label>Name *</label>
+                    <input type="text" name="name" placeholder="e.g. Office Chair" required>
                 </div>
                 <div>
                     <label>Location</label>
@@ -116,9 +122,19 @@
                     </select>
                 </div>
             </div>
+            
+            <div style="margin-bottom: 15px;">
+                <label>Tags</label>
+                <select class="init-select2-tags" name="tags" multiple="multiple" style="width: 100%;">
+                    {% for tag in unique_tags %}
+                        <option value="{{ tag }}">{{ tag }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
             <label>Photo</label>
             <input type="file" name="photo">
-            <button type="submit" class="btn-primary" style="margin-top:10px;">Add Item</button>
+            <button type="submit" class="btn-primary">Add Item</button>
         </form>
     </div>
 
@@ -126,10 +142,8 @@
     <div class="card">
         <div class="filter-header">
             <h3 style="margin-bottom:0; margin-right: 20px;">Inventory</h3>
-            
             <div class="toolbar">
                 <button onclick="startScanner()" class="btn-scan"><span>📷</span> Scan</button>
-                
                 <form action="/dashboard" method="get" class="filter-form">
                     <div class="select-wrapper">
                         <select name="loc" class="init-select2-filter" style="width: 100%;" onchange="this.form.submit()">
@@ -139,7 +153,6 @@
                             {% endfor %}
                         </select>
                     </div>
-                    
                     <div class="search-group">
                         <input type="text" name="q" placeholder="Search..." value="{{ search_query or '' }}">
                         <button type="submit" class="btn-search">🔍</button>
@@ -155,8 +168,9 @@
         <table>
             <thead>
                 <tr>
-                    <th width="100">Image</th>
+                    <th width="90">Image</th>
                     <th>Name</th>
+                    <th>Tags (Click to Edit)</th>
                     <th>Location</th>
                     <th>UID</th>
                     <th align="right">Action</th>
@@ -173,6 +187,21 @@
                         {% endif %}
                     </td>
                     <td data-label="Name"><strong>{{ item.name }}</strong></td>
+                    
+                    <!-- EDITABLE TAGS -->
+                    <td data-label="Tags" class="editable" 
+                        data-current-tags="{{ item.tags or '' }}" 
+                        onclick="editDashboardTags(this, '{{ item.uid }}')">
+                        
+                        {% if item.tags %}
+                            {% for tag in item.tags.split(',') %}
+                                {% if tag %}<span class="tag-pill">{{ tag }}</span>{% endif %}
+                            {% endfor %}
+                        {% else %}
+                            <span style="color:#ccc; font-size:0.8em;">Add tags...</span>
+                        {% endif %}
+                    </td>
+
                     <td data-label="Location" class="editable" onclick="editDashboardLocation(this, '{{ item.uid }}')">
                         {{ item.location or 'Set Location' }}
                     </td>
@@ -187,7 +216,7 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="5" style="text-align:center; padding:30px;">No items found.</td></tr>
+                <tr><td colspan="6" style="text-align:center; padding:30px;">No items found.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -197,7 +226,12 @@
     <script src="https://code.jquery.com/jquery-3.7.1.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js" defer></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript" defer></script>
-    <script>window.availableLocations = {{ locations | tojson }};</script>
+    
+    <script>
+        window.availableLocations = {{ locations | tojson }};
+        window.availableTags = {{ unique_tags | tojson }}; 
+    </script>
+    
     <script src="/static/js/scripts.js" defer></script>
 
     <script>
@@ -208,19 +242,34 @@
                     clearInterval(i);
                     $('.init-select2').select2({ tags: true, placeholder: "Select or type new...", allowClear: true });
                     $('.init-select2-filter').select2({ tags: false, placeholder: "Location", allowClear: true });
+                    
+                    // Init Create Form Tags
+                    $('.init-select2-tags').select2({ 
+                        tags: true, 
+                        placeholder: "Add tags...", 
+                        tokenSeparators: [',', ' '],
+                        allowClear: true,
+                        width: '100%'
+                    });
                 }
             }, 100);
         });
 
-        // Simplified Scanner Logic (Assumes scripts.js has helpers, but needs start logic here)
+        // Scanner Logic
         let html5QrcodeScanner;
+        function logError(msg) {
+            const logEl = document.getElementById('debug-log');
+            if(logEl) { logEl.style.display = "block"; logEl.innerText += "ERROR: " + msg + "\n"; }
+            console.error(msg);
+        }
         function startScanner() {
+            document.getElementById('debug-log').style.display = "none";
             document.getElementById('scanner-overlay').style.display = "flex";
-            if (typeof Html5Qrcode === "undefined") { alert("Scanner lib not loaded"); return; }
+            if (typeof Html5Qrcode === "undefined") { logError("Scanner lib not loaded"); return; }
             html5QrcodeScanner = new Html5Qrcode("reader", { verbose: false });
-            html5QrcodeScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, 
+            html5QrcodeScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 }, 
             (t) => { stopScanner(); window.location.href = "/items/" + (t.includes("/items/") ? t.split("/").pop() : t); },
-            () => {}).catch(e => { alert("Camera failed: " + e); stopScanner(); });
+            () => {}).catch(e => logError(e));
         }
         function stopScanner() {
             document.getElementById('scanner-overlay').style.display = "none";

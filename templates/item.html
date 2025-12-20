@@ -7,7 +7,12 @@
     
     <script src="https://code.jquery.com/jquery-3.7.1.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js" defer></script>
-    <script>window.availableLocations = {{ locations | tojson }};</script>
+    
+    <script>
+        window.availableLocations = {{ locations | tojson }};
+        window.availableTags = {{ unique_tags | tojson }};
+    </script>
+    
     <script src="/static/js/scripts.js" defer></script>
 
     <style>
@@ -26,17 +31,14 @@
         
         .note-box { background-color: #fff9db; min-height: 80px; white-space: pre-wrap; }
         input.edit-input, textarea.edit-input { width: 100%; padding: 12px; font-size: 1.1em; border: 2px solid #007bff; border-radius: 4px; box-sizing: border-box; font-family: sans-serif; }
-        .select2-container { display: block; width: 100% !important; }
         
-        /* PHOTO UPLOAD STYLES */
+        /* Select2 Style Fixes */
+        .select2-container { display: block; width: 100% !important; }
+        .select2-container .select2-selection--multiple { min-height: 42px; }
+        
         .photo-wrapper { position: relative; display: inline-block; width: 100%; text-align: center; }
         .photo-wrapper img { max-width: 100%; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .upload-overlay {
-            position: absolute; bottom: 10px; right: 10px;
-            background: rgba(0,0,0,0.7); color: white; padding: 8px 12px;
-            border-radius: 20px; cursor: pointer; font-size: 0.9em;
-            display: flex; align-items: center; gap: 5px;
-        }
+        .upload-overlay { position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 8px 12px; border-radius: 20px; cursor: pointer; font-size: 0.9em; display: flex; align-items: center; gap: 5px; }
         .upload-overlay:hover { background: black; }
         
         .footer { margin-top: 30px; border-top: 1px solid #eee; padding-top: 15px; font-size: 0.9em; color: #999; text-align: center; }
@@ -49,9 +51,13 @@
         <a href="/dashboard" class="back-link">&larr; Dashboard</a>
         <h1>{{ item.name }}</h1>
 
+        <!-- TAGS (NEW) -->
         <div class="property">
-            <span class="label">Notes</span>
-            <div id="note-display" class="editable-box note-box" onclick="editItemField('note-display', 'note', '{{ item.uid }}')">{{ item.note or 'Click to add note...' }}</div>
+            <span class="label">Tags</span>
+            <div id="tags-display" class="editable-box" 
+                 onclick="editItemField('tags-display', 'tags', '{{ item.uid }}')">
+                 {{ item.tags.replace(',', ', ') if item.tags else 'Click to add tags...' }}
+            </div>
         </div>
 
         <div class="property">
@@ -60,24 +66,24 @@
         </div>
 
         <div class="property">
+            <span class="label">Notes</span>
+            <div id="note-display" class="editable-box note-box" onclick="editItemField('note-display', 'note', '{{ item.uid }}')">{{ item.note or 'Click to add note...' }}</div>
+        </div>
+
+        <div class="property">
             <span class="label">Created / Modified Date</span>
             <div id="date-display" class="editable-box" onclick="editItemField('date-display', 'date', '{{ item.uid }}')">{{ item.date }}</div>
         </div>
 
-        <!-- PHOTO SECTION -->
         <div class="property">
             <span class="label">Photo</span>
             <div class="photo-wrapper">
                 {% if item.photo %}
-		    <img src="/static/uploads/{{ item.photo }}" alt="{{ item.name }}">
+                    <img src="/static/uploads/{{ item.photo }}" alt="{{ item.name }}">
                 {% else %}
-                    <div style="padding:40px; background:#f9f9f9; border:1px dashed #ccc; border-radius:8px; color:#999;">No photo available</div>
+                    <div style="padding:40px; background:#f9f9f9; border:1px dashed #ccc; border-radius:8px; color:#999; text-align: center;">No photo available</div>
                 {% endif %}
-                
-                <!-- Upload Button Overlay -->
-                <label for="photo-upload" class="upload-overlay">
-                    📷 Change Photo
-                </label>
+                <label for="photo-upload" class="upload-overlay">📷 Change Photo</label>
                 <input type="file" id="photo-upload" style="display: none;" accept="image/*" onchange="uploadPhoto('{{ item.uid }}', this)">
             </div>
         </div>
@@ -90,34 +96,15 @@
     </div>
 
     <script>
-        // Inline script for Photo Upload logic
         function uploadPhoto(uid, input) {
             if (input.files && input.files[0]) {
                 const formData = new FormData();
                 formData.append('photo', input.files[0]);
-
-                // Show simple loading feedback
                 const label = document.querySelector('.upload-overlay');
-                const originalText = label.innerText;
                 label.innerText = "Uploading...";
-
-                fetch(`/items/${uid}/photo`, {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => {
-                    if (response.ok) {
-                        location.reload(); // Reload to show new image
-                    } else {
-                        alert("Upload failed.");
-                        label.innerText = originalText;
-                    }
-                })
-                .catch(err => {
-                    console.error(err);
-                    alert("Error uploading photo.");
-                    label.innerText = originalText;
-                });
+                fetch(`/items/${uid}/photo`, { method: 'POST', body: formData })
+                .then(r => r.ok ? location.reload() : alert("Upload failed"))
+                .catch(e => alert("Error"));
             }
         }
     </script>

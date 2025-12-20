@@ -226,3 +226,61 @@ class ItemService:
                                .filter(Item.location != None, Item.location != "")\
                                .order_by(Item.location).all()
             return [loc[0] for loc in locations]
+
+    def update_tags(self, uid: str, tags_list: list):
+        # Convert list ["a", "b"] -> string "a,b"
+        tags_str = ",".join(tags_list) if tags_list else None
+
+        with self.db.session() as session:
+            item = session.query(Item).filter(Item.uid == uid).first()
+            if item:
+                item.tags = tags_str
+                session.commit()
+                return True
+            return False
+
+    def get_unique_tags(self):
+        """Returns a flat list of all unique tags used in the system."""
+        with self.db.session() as session:
+            # Get all non-empty tag strings
+            results = session.query(Item.tags).filter(Item.tags != None, Item.tags != "").all()
+            
+            unique_set = set()
+            for r in results:
+                # r[0] is "tag1,tag2". Split and add.
+                for t in r[0].split(','):
+                    if t.strip():
+                        unique_set.add(t.strip())
+            
+            return sorted(list(unique_set))
+
+    def get_all_items(self, search_query: str = None, location_filter: str = None):
+        with self.db.session() as session:
+            query = session.query(Item)
+
+            if location_filter:
+                query = query.filter(Item.location == location_filter)
+
+            if search_query:
+                or_groups = search_query.split('||')
+                or_filters = []
+                for group in or_groups:
+                    and_parts = group.split('&&')
+                    and_filters = []
+                    for part in and_parts:
+                        term = part.strip()
+                        if term:
+                            fmt = f"%{term}%"
+                            # UPDATED: Added Item.tags to the search filter
+                            and_filters.append(or_(
+                                Item.name.ilike(fmt), 
+                                Item.location.ilike(fmt),
+                                Item.note.ilike(fmt),
+                                Item.tags.ilike(fmt) 
+                            ))
+                    if and_filters:
+                        or_filters.append(and_(*and_filters))
+                if or_filters:
+                    query = query.filter(or_(*or_filters))
+
+            return query.all()
