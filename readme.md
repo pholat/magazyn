@@ -18,8 +18,9 @@ With that I can do both:
     * Kept in line as long as it was sane.
     * Most of the features are manualy tested.
 * if you ever ask AI about migrations, mention orm and alembic use. For some reason AI first answers were always: remove the db, then: do manual migration.
+* There will be bugs creeping - I made it for my use, so I'll probably fix what I need in the long run.
 
-## 🚀 Features
+## Features
 
 *   **QR Code Integration**: 
     *   Generate printable QR labels for items.
@@ -37,18 +38,25 @@ With that I can do both:
 *   **Inline Editing**: Click-to-edit for Notes, Locations, Dates, and Tags directly on the dashboard.
 *   **Offline Ready**: All JS/CSS assets are hosted locally (no CDN dependencies).
 
-Few screenshots here:
+### Future ideas I may embrace:
 
-[doc][./doc/images.md]
+* tags vs hierachy or maybe both
+* sql-like queries instead simple ones
+* more users
+* more compact mobile view - I dislike the pretty, wastefull mobile views.
 
-## 🛠️ Technology
+### Few screenshots here
+
+[images](./doc/images.md)
+
+## Technology
 
 *   **Backend**: Python, FastAPI, SQLAlchemy (SQLite), Pydantic.
 *   **Frontend**: HTML, CSS, JavaScript (jQuery, Select2).
 *   **Dependency Injection**: Custom DI container (Manual resolution pattern).
 *   **Imaging**: Pillow (PIL) for processing and Qrcode for generation.
 
-## 📦 Installation
+## Installation
 
 ### Prerequisites
 *   Python 3.10+
