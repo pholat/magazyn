@@ -141,6 +141,8 @@ def dashboard(
     
     # 1. Get filtered items
     items = item_service.get_all_items(search_query=q, location_filter=loc)
+#    for item in items:
+#        print(f"-> {item=}")
     
     # 2. Get Metadata for Dropdowns (Locations & Tags)
     locations = item_service.get_unique_locations()

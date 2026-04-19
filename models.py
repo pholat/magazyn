@@ -25,3 +25,6 @@ class Item(Base):
     photo = Column(String, nullable=True)
     note = Column(String, nullable=True)
     tags = Column(String, nullable=True)
+
+    def __repr__(self):
+        return f'{self.uid} {self.name=} {self.date=} {self.location=}>'

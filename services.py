@@ -181,7 +181,7 @@ class ItemService:
         with self.db.session() as session:
             item = session.query(Item).filter(Item.uid == uid).first()
             if item:
-                item.date = dt_object
+
                 session.commit()
                 return True
             return False
@@ -191,9 +191,11 @@ class ItemService:
             return session.query(Item).filter(Item.uid == uid).first()
 
     def get_all_items(self, search_query: str = None, location_filter: str = None):
+        # TODO this is probably unused as there is definition after it that's in use...
+        # consider removing
         with self.db.session() as session:
             query = session.query(Item)
-            
+
             if location_filter:
                 query = query.filter(Item.location == location_filter)
 
@@ -217,7 +219,8 @@ class ItemService:
                         or_filters.append(and_(*and_filters))
                 if or_filters:
                     query = query.filter(or_(*or_filters))
-            
+
+            query = query.order_by(Item.date.desc())
             return query.all()
 
     def get_unique_locations(self):
@@ -283,4 +286,5 @@ class ItemService:
                 if or_filters:
                     query = query.filter(or_(*or_filters))
 
+            query = query.order_by(Item.date.desc())
             return query.all()
