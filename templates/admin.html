@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin - User Management</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: sans-serif; max-width: 1000px; margin: 0 auto; padding: 15px; background-color: #f4f6f8; color: #333; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        h3 { margin-top: 0; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; margin-bottom: 20px; }
+        label { font-weight: bold; font-size: 0.9em; display: block; margin-bottom: 5px; }
+        input[type="text"], input[type="password"], select { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; height: 40px; }
+        .btn-primary, .btn-danger { border: none; border-radius: 4px; cursor: pointer; color: white; padding: 0 15px; font-size: 14px; height: 40px; display: inline-flex; align-items: center; justify-content: center; width: 100%; margin-top: 10px; }
+        .btn-primary { background: #007bff; }
+        .btn-danger { background: #dc3545; }
+        .btn-sm { width: auto; padding: 5px 10px; height: 30px; font-size: 0.8em; margin-top: 0; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { background: #f8f9fa; text-align: left; padding: 12px; border-bottom: 2px solid #dee2e6; color: #495057; }
+        td { padding: 12px; border-bottom: 1px solid #dee2e6; vertical-align: middle; }
+        .error-message { color: red; margin-bottom: 15px; }
+
+        @media screen and (max-width: 768px) {
+            table, thead, tbody, th, td, tr { display: block; }
+            thead tr { position: absolute; top: -9999px; left: -9999px; }
+            tr { margin-bottom: 15px; border: 1px solid #ddd; border-radius: 8px; padding: 10px; background: #fff; }
+            td { border: none; position: relative; padding-left: 50%; text-align: right; min-height: 25px; display: flex; align-items: center; justify-content: flex-end; }
+            td:before { position: absolute; left: 10px; width: 45%; text-align: left; font-weight: bold; color: #666; content: attr(data-label); }
+            td[data-label="Actions"] { justify-content: space-between; padding-left: 0; margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px; flex-wrap: wrap;}
+            td[data-label="Actions"]:before { display: none; }
+            td[data-label="Actions"] form { width: 100%; margin-bottom: 5px;}
+            td[data-label="Actions"] .btn-sm { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Admin - User Management</h1>
+        <div>
+            <a href="/dashboard" style="margin-right: 15px; text-decoration: none; color: #007bff;">Dashboard</a>
+            <a href="/logout" style="color:red; text-decoration:none;">Logout</a>
+        </div>
+    </div>
+
+    {% if error %}
+        <div class="error-message">{{ error }}</div>
+    {% endif %}
+
+    <div class="card">
+        <h3>Add New User</h3>
+        <form action="/admin/users" method="post">
+            <label for="new-username">Username</label>
+            <input type="text" id="new-username" name="username" required>
+
+            <label for="new-password">Password</label>
+            <input type="password" id="new-password" name="password" required>
+
+            <label for="new-role">Role</label>
+            <select id="new-role" name="role">
+                <option value="user">User</option>
+                <option value="administrator">Administrator</option>
+            </select>
+
+            <button type="submit" class="btn-primary">Add User</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3>Existing Users</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Role</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td data-label="Username">{{ user.username }}</td>
+                    <td data-label="Role">
+                        <form action="/admin/users/{{ user.username }}/role" method="post" style="display:flex; gap: 5px; align-items:center;">
+                            <select name="role" onchange="this.form.submit()" {% if user.username == current_user.username %}disabled{% endif %}>
+                                <option value="user" {% if user.role == "user" %}selected{% endif %}>User</option>
+                                <option value="administrator" {% if user.role == "administrator" %}selected{% endif %}>Administrator</option>
+                            </select>
+                        </form>
+                    </td>
+                    <td data-label="Actions">
+                        {% if user.username != current_user.username %}
+                        <form action="/admin/users/delete" method="post" onsubmit="return confirm('Are you sure you want to delete user {{ user.username }}?');">
+                            <input type="hidden" name="username" value="{{ user.username }}">
+                            <button type="submit" class="btn-danger btn-sm">Delete</button>
+                        </form>
+                        {% else %}
+                            <span style="color:#666;">(Cannot delete self)</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" style="text-align:center; padding:20px;">No users found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
