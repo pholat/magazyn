@@ -237,15 +237,22 @@ def dashboard(
     request: Request,
     q: Optional[str] = None,
     loc: Optional[str] = None,
+    page: int = 1, # Add page parameter with default value
+    page_size: int = 30, # Add page_size parameter with default value
     user = Depends(get_current_user_cookie),
     item_service: ItemService = Depends(get_item_service)
 ):
     if not user: return RedirectResponse("/login", status_code=302)
     
-    # 1. Get filtered items
-    items = item_service.get_all_items(search_query=q, location_filter=loc)
-#    for item in items:
-#        print(f"-> {item=}")
+    # 1. Get paginated and filtered items
+    paginated_items, total_items = item_service.get_paginated_items(
+        page=page, 
+        page_size=page_size, 
+        search_query=q, 
+        location_filter=loc
+    )
+    
+    total_pages = (total_items + page_size - 1) // page_size # Calculate total pages
     
     # 2. Get Metadata for Dropdowns (Locations & Tags)
     locations = item_service.get_unique_locations()
@@ -255,11 +262,13 @@ def dashboard(
         "request": request, 
         "username": user.username, 
         "user_role": user.role, # Pass user role to template
-        "items": items,
+        "items": paginated_items,
         "search_query": q,
         "selected_location": loc,
         "locations": locations,
-        "unique_tags": tags # Fixed: Passed to prevent JS error
+        "unique_tags": tags, # Fixed: Passed to prevent JS error
+        "current_page": page, # Pass current page to template
+        "total_pages": total_pages # Pass total pages to template
     })
 
 @app.post("/items")

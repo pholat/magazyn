@@ -257,6 +257,43 @@ class ItemService:
             query = query.order_by(Item.date.desc())
             return query.all()
 
+    def get_paginated_items(self, page: int, page_size: int, search_query: str = None, location_filter: str = None):
+        with self.db.session() as session:
+            query = session.query(Item)
+
+            if location_filter:
+                query = query.filter(Item.location == location_filter)
+
+            if search_query:
+                or_groups = search_query.split('||')
+                or_filters = []
+                for group in or_groups:
+                    and_parts = group.split('&&')
+                    and_filters = []
+                    for part in and_parts:
+                        term = part.strip()
+                        if term:
+                            fmt = f"%{term}%"
+                            and_filters.append(or_(
+                                Item.name.ilike(fmt), 
+                                Item.location.ilike(fmt),
+                                Item.note.ilike(fmt),
+                                Item.tags.ilike(fmt)
+                            ))
+                    if and_filters:
+                        or_filters.append(and_(*and_filters))
+                if or_filters:
+                    query = query.filter(or_(*or_filters))
+
+            # Get total count before applying limit and offset
+            total_items = query.count()
+            
+            # Apply pagination
+            offset = (page - 1) * page_size
+            paginated_query = query.order_by(Item.date.desc()).offset(offset).limit(page_size)
+            
+            return paginated_query.all(), total_items
+
     def get_unique_locations(self):
         with self.db.session() as session:
             locations = session.query(distinct(Item.location))\
