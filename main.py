@@ -4,18 +4,32 @@ from io import BytesIO
 from typing import Optional, List
 from datetime import datetime, timedelta
 
-from fastapi import FastAPI, Depends, Request, Form, Response, status, UploadFile, File
+from fastapi import FastAPI, Depends, Request, Form, Response, status, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from jose import JWTError, jwt
 from pydantic import BaseModel
+
+# New Pydantic Models for User Management
+class UserCreate(BaseModel):
+    username: str
+    password: str
+    role: Optional[str] = "user"
+
+class UserDelete(BaseModel):
+    username: str
+
+class UserRoleUpdate(BaseModel):
+    role: str
+
 from PIL import Image
 
 # Dependency Injection Imports
 from di import container
 from services import AuthService, ItemService
 from database import Database
+import models # Import models to access User model for admin_required dependency
 from typing import List
 
 # --- APP SETUP ---
@@ -52,7 +66,7 @@ def startup():
     
     # 2. Create Default Admin User (if not exists)
     auth = container.resolve(AuthService)
-    auth.create_user("admin", "admin")
+    auth.create_user("admin", "admin", role="administrator")
     print("✅ Startup complete. Admin user checked.")
 
 # --- DEPENDENCY HELPERS ---
@@ -79,6 +93,66 @@ def get_current_user_cookie(request: Request, service: AuthService = Depends(get
         return service.get_user(username)
     except JWTError:
         return None
+
+def admin_required(user: models.User = Depends(get_current_user_cookie)):
+    if not user or user.role != "administrator":
+        raise HTTPException(status_code=403, detail="Operation forbidden")
+    return user
+
+# ==================================================================
+# ROUTES: ADMIN (User Management)
+# ==================================================================
+
+@app.get("/admin/users", response_class=HTMLResponse)
+def admin_users_page(request: Request, user: models.User = Depends(admin_required), auth_service: AuthService = Depends(get_auth_service)):
+    users = auth_service.get_all_users()
+    return templates.TemplateResponse("admin.html", {"request": request, "users": users, "current_user": user})
+
+@app.post("/admin/users")
+def admin_create_user(
+    username: str = Form(...),
+    password: str = Form(...),
+    role: str = Form("user"),
+    user: models.User = Depends(admin_required),
+    auth_service: AuthService = Depends(get_auth_service)
+):
+    if auth_service.create_user(username, password, role):
+        return RedirectResponse("/admin/users", status_code=status.HTTP_303_SEE_OTHER)
+    return templates.TemplateResponse(
+        "admin.html", 
+        {"request": request, "error": "User already exists or creation failed", "users": auth_service.get_all_users()}, 
+        status_code=status.HTTP_400_BAD_REQUEST
+    )
+
+@app.post("/admin/users/delete")
+def admin_delete_user(
+    username: str = Form(...),
+    user: models.User = Depends(admin_required),
+    auth_service: AuthService = Depends(get_auth_service)
+):
+    if auth_service.delete_user(username):
+        return RedirectResponse("/admin/users", status_code=status.HTTP_303_SEE_OTHER)
+    return templates.TemplateResponse(
+        "admin.html", 
+        {"request": request, "error": "User not found or deletion failed", "users": auth_service.get_all_users()},
+        status_code=status.HTTP_404_NOT_FOUND
+    )
+
+@app.post("/admin/users/{username}/role")
+def admin_update_user_role(
+    username: str,
+    role: str = Form(...),
+    user: models.User = Depends(admin_required),
+    auth_service: AuthService = Depends(get_auth_service)
+):
+    if auth_service.update_user_role(username, role):
+        return RedirectResponse("/admin/users", status_code=status.HTTP_303_SEE_OTHER)
+    return templates.TemplateResponse(
+        "admin.html", 
+        {"request": request, "error": "User not found or role update failed", "users": auth_service.get_all_users()},
+        status_code=status.HTTP_400_BAD_REQUEST
+    )
+
 
 # ==================================================================
 # ROUTES: AUTHENTICATION
@@ -151,6 +225,7 @@ def dashboard(
     return templates.TemplateResponse("dashboard.html", {
         "request": request, 
         "username": user.username, 
+        "user_role": user.role, # Pass user role to template
         "items": items,
         "search_query": q,
         "selected_location": loc,

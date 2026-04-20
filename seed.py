@@ -37,7 +37,7 @@ def seed_user():
 
     # 4. Create the user
     print(f"\nAttempting to create user '{username}'...")
-    success = auth_service.create_user(username, password)
+    success = auth_service.create_user(username, password, role="user")
 
     if success:
         print(f"✅ Success! User '{username}' created.")

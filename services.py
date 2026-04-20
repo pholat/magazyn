@@ -37,14 +37,36 @@ class AuthService:
         with self.db.session() as session:
             return session.query(User).filter(User.username == username).first()
 
-    def create_user(self, username, password):
+    def create_user(self, username, password, role="user"):
         with self.db.session() as session:
             if session.query(User).filter(User.username == username).first():
                 return False
-            user = User(username=username, hashed_password=self.get_password_hash(password))
+            user = User(username=username, hashed_password=self.get_password_hash(password), role=role)
             session.add(user)
             session.commit()
             return True
+
+    def get_all_users(self):
+        with self.db.session() as session:
+            return session.query(User).all()
+
+    def delete_user(self, username: str):
+        with self.db.session() as session:
+            user = session.query(User).filter(User.username == username).first()
+            if user:
+                session.delete(user)
+                session.commit()
+                return True
+            return False
+
+    def update_user_role(self, username: str, new_role: str):
+        with self.db.session() as session:
+            user = session.query(User).filter(User.username == username).first()
+            if user:
+                user.role = new_role
+                session.commit()
+                return True
+            return False
 
     def authenticate(self, username, password):
         user = self.get_user(username)
