@@ -23,6 +23,10 @@ class UserDelete(BaseModel):
 class UserRoleUpdate(BaseModel):
     role: str
 
+class ChangePasswordRequest(BaseModel):
+    currentPassword: str
+    newPassword: str
+
 from PIL import Image
 
 # Dependency Injection Imports
@@ -198,6 +202,31 @@ def logout():
     response = RedirectResponse("/login", status_code=302)
     response.delete_cookie("access_token")
     return response
+
+# ==================================================================
+# ROUTES: USER CONFIGURATION
+# ==================================================================
+
+@app.get("/user/config", response_class=HTMLResponse)
+async def user_config_page(request: Request, user = Depends(get_current_user_cookie)):
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    return templates.TemplateResponse("user_config.html", {"request": request, "current_user": user})
+
+@app.post("/api/change-password")
+async def change_password(request_body: ChangePasswordRequest, user = Depends(get_current_user_cookie), auth_service: AuthService = Depends(get_auth_service)):
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+    # 1. Verify the current password
+    if not auth_service.verify_password(user.username, request_body.currentPassword):
+        raise HTTPException(status_code=400, detail="Incorrect current password.")
+    
+    # 2. Update the user's password
+    if not auth_service.update_password(user.username, request_body.newPassword):
+        raise HTTPException(status_code=500, detail="Failed to update password.")
+    
+    return {"message": "Password changed successfully!"}
 
 # ==================================================================
 # ROUTES: DASHBOARD & ITEMS

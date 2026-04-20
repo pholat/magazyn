@@ -27,8 +27,20 @@ class AuthService:
     def __init__(self, db: Database):
         self.db = db
 
-    def verify_password(self, plain_password, hashed_password):
-        return pwd_context.verify(plain_password, hashed_password)
+    def verify_password(self, username: str, plain_password: str):
+        user = self.get_user(username)
+        if not user:
+            return False
+        return pwd_context.verify(plain_password, user.hashed_password)
+
+    def update_password(self, username: str, new_password: str):
+        with self.db.session() as session:
+            user = session.query(User).filter(User.username == username).first()
+            if user:
+                user.hashed_password = self.get_password_hash(new_password)
+                session.commit()
+                return True
+            return False
 
     def get_password_hash(self, password):
         return pwd_context.hash(password)
@@ -70,7 +82,7 @@ class AuthService:
 
     def authenticate(self, username, password):
         user = self.get_user(username)
-        if not user or not self.verify_password(password, user.hashed_password):
+        if not user or not self.verify_password(username, password):
             return None
         return user
 
