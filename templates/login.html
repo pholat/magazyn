@@ -1,10 +1,16 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login</title>
     <style>
         body { font-family: sans-serif; height: 100vh; display: flex; align-items: center; justify-content: center; background: #fafafa; }
-        form { background: #fff; padding: 2rem; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        form { background: #fff; padding: 2rem; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); width: 100%; max-width: 400px; margin: auto; }
+        @media (max-width: 600px) {
+            form { padding: 1.5rem; width: 90%; }
+            input { padding: 10px; }
+            button { padding: 12px; font-size: 1rem; }
+        }
         input { display: block; width: 100%; margin-bottom: 10px; padding: 8px; box-sizing: border-box; }
         button { width: 100%; padding: 10px; background: #007bff; color: white; border: none; cursor: pointer; }
         .err { color: red; text-align: center; margin-bottom: 10px; }
